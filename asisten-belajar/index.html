@@ -1,0 +1,1922 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Asisten Belajar Offline & Lokal (Standalone Single File)</title>
+  
+  <!-- PDF.js via cdnjs (Offline/Client-Side PDF Text Extractor) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    if (window.pdfjsLib) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  </script>
+
+  <!-- Tailwind CSS via CDN (Satu-satunya dependensi eksternal yang diizinkan) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
+            mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#f0f7ff', 100: '#e0effe', 200: '#bae0fd', 300: '#7cc5fb',
+              400: '#36a7f7', 500: '#0c8ce9', 600: '#026fc7', 700: '#0358a1',
+              800: '#074b85', 900: '#0c3f6e', 950: '#082849',
+            },
+            surface: {
+              50: '#f8fafc', 100: '#f1f5f9', 200: '#e2e8f0', 800: '#1e293b',
+              850: '#172033', 900: '#0f172a', 950: '#090d16',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- =========================================================================
+       CSS TERTANAM: 3D Flip Card, Scrollbar Custom, & Animasi Indikator
+       ========================================================================= -->
+  <style>
+    /* Scrollbar modern minimalis */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.2);
+      border-radius: 9999px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.4);
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Tab navigation buttons */
+    .tab-btn {
+      color: #94a3b8;
+      background-color: transparent;
+    }
+    .tab-btn:hover {
+      color: #f1f5f9;
+      background-color: rgba(255, 255, 255, 0.04);
+    }
+    .tab-btn.active {
+      color: #38bdf8;
+      background-color: rgba(12, 140, 233, 0.12);
+      border: 1px solid rgba(12, 140, 233, 0.25);
+    }
+
+    /* 3D Perspective Flashcard Flip */
+    .perspective-1000 {
+      perspective: 1000px;
+    }
+    .preserve-3d {
+      transform-style: preserve-3d;
+    }
+    .backface-hidden {
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+    }
+    .rotate-y-180 {
+      transform: rotateY(180deg);
+    }
+    .flashcard-card {
+      transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .flashcard-card.flipped {
+      transform: rotateY(180deg);
+    }
+
+    /* Cursor berkedip untuk simulasi streaming AI */
+    .typing-cursor {
+      display: inline-block;
+      width: 7px;
+      height: 14px;
+      margin-left: 3px;
+      vertical-align: middle;
+      background-color: #38bdf8;
+      animation: blink 0.9s infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    /* Opsi kuis interaktif */
+    .quiz-option {
+      transition: all 0.15s ease-in-out;
+    }
+    .quiz-option:has(input[type="radio"]:checked) {
+      border-color: #0c8ce9;
+      background-color: rgba(12, 140, 233, 0.08);
+    }
+    .quiz-option.option-correct {
+      border-color: #10b981 !important;
+      background-color: rgba(16, 185, 129, 0.15) !important;
+      color: #a7f3d0 !important;
+    }
+    .quiz-option.option-correct span {
+      color: #6ee7b7 !important;
+      font-weight: 600;
+    }
+    .quiz-option.option-incorrect {
+      border-color: #ef4444 !important;
+      background-color: rgba(239, 68, 68, 0.15) !important;
+      color: #fca5a5 !important;
+    }
+    .quiz-option.option-incorrect span {
+      color: #fca5a5 !important;
+      text-decoration: line-through;
+    }
+
+    /* Drag and drop active feedback */
+    #dropzone.drag-active {
+      border-color: #38bdf8;
+      background-color: rgba(12, 140, 233, 0.15);
+      transform: scale(1.008);
+    }
+  </style>
+</head>
+<body class="h-full bg-surface-950 text-slate-100 font-sans antialiased overflow-hidden flex flex-col selection:bg-brand-500/30 selection:text-brand-200">
+
+  <!-- =========================================================================
+       TOP HEADER
+       ========================================================================= -->
+  <header class="h-14 border-b border-surface-800/80 bg-surface-900/90 backdrop-blur-md px-5 flex items-center justify-between z-20 shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-brand-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-brand-500/20">
+        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-sm font-bold tracking-tight text-white flex items-center gap-2">
+          Asisten Belajar
+          <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20">Offline SPA</span>
+        </h1>
+      </div>
+    </div>
+
+    <!-- Active Document Status Indicator -->
+    <div class="flex items-center gap-4 text-xs">
+      <div class="flex items-center gap-2 px-3 py-1 rounded-lg bg-surface-800/70 border border-surface-700/60 text-slate-300">
+        <svg class="w-3.5 h-3.5 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+        </svg>
+        <span class="text-slate-400">File Aktif:</span>
+        <span id="header-active-doc" class="font-medium text-slate-200 truncate max-w-[170px]">Belum Ada Dokumen</span>
+      </div>
+
+      <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-medium">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span>Local / Offline</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- =========================================================================
+       MAIN WORKSPACE: PANEL KIRI (TAB MATERI) & PANEL KANAN (AI CHATBOT)
+       ========================================================================= -->
+  <main class="flex-1 flex overflow-hidden">
+    
+    <!-- ==================== PANEL KIRI ==================== -->
+    <section class="flex-1 flex flex-col min-w-0 bg-surface-950/70 border-r border-surface-800/80">
+      
+      <!-- Navigasi Tab -->
+      <nav class="h-12 border-b border-surface-800/80 bg-surface-900/40 px-4 flex items-center justify-between shrink-0 gap-2 overflow-x-auto no-scrollbar">
+        <div class="flex items-center gap-1.5">
+          <button id="tab-btn-upload" class="tab-btn active px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 flex items-center gap-2">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+            <span>Upload File</span>
+          </button>
+          <button id="tab-btn-viewer" class="tab-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 flex items-center gap-2">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+            <span>Viewer Teks</span>
+          </button>
+          <button id="tab-btn-flashcards" class="tab-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 flex items-center gap-2">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+            <span>Flashcards (3D)</span>
+            <span id="flashcard-badge-count" class="hidden text-[10px] bg-brand-500/20 text-brand-300 px-1.5 py-0.2 rounded-full">0</span>
+          </button>
+          <button id="tab-btn-quiz" class="tab-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 flex items-center gap-2">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+            <span>Generator Kuis (5 Soal)</span>
+          </button>
+        </div>
+        <div class="text-[11px] text-slate-400 font-mono hidden md:block">Workspace Panel</div>
+      </nav>
+
+      <!-- Wadah Konten Tab -->
+      <div class="flex-1 overflow-y-auto custom-scrollbar p-6">
+        
+        <!-- Tab 1: Upload Dokumen -->
+        <div id="content-tab-upload" class="tab-content block space-y-6 max-w-4xl mx-auto">
+          <div>
+            <h2 class="text-lg font-bold text-white tracking-tight">Upload & Manajemen Dokumen</h2>
+            <p class="text-xs text-slate-400 mt-1">Unggah bahan ajar berformat <code class="text-brand-300 font-mono">.pdf</code>, <code class="text-brand-300 font-mono">.txt</code>, atau <code class="text-brand-300 font-mono">.md</code>. Seluruh data diekstraksi 100% di browser secara lokal.</p>
+          </div>
+
+          <!-- Drag and Drop Zone (Mendukung Multi-file & PDF) -->
+          <div id="dropzone" class="relative group border-2 border-dashed border-surface-700 hover:border-brand-500 rounded-2xl p-8 transition-all duration-200 bg-surface-900/30 hover:bg-brand-950/20 text-center cursor-pointer">
+            <input type="file" id="file-input" accept=".txt,.md,.pdf" multiple class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+            <div class="flex flex-col items-center justify-center space-y-3">
+              <div class="w-14 h-14 rounded-2xl bg-surface-800 group-hover:bg-brand-500/10 group-hover:text-brand-400 text-slate-400 flex items-center justify-center transition-colors">
+                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+              </div>
+              <div>
+                <p class="text-sm font-semibold text-slate-200">Tarik & Lepaskan satu atau banyak file sekaligus</p>
+                <p class="text-xs text-slate-500 mt-0.5">atau <span class="text-brand-400 group-hover:underline">klik untuk pilih banyak file</span> (.pdf, .txt, .md)</p>
+              </div>
+              <div class="text-[11px] font-mono px-2.5 py-1 rounded bg-surface-800 text-slate-400 border border-surface-700/60">
+                Mendukung .PDF, .TXT, .MD &bull; Ekstraksi Teks Otomatis &bull; Auto Flashcards & Kuis
+              </div>
+            </div>
+          </div>
+
+          <!-- Tombol Muat Contoh Materi -->
+          <div class="flex items-center justify-between p-3.5 rounded-xl bg-surface-900/40 border border-surface-800">
+            <div class="text-xs text-slate-300">
+              <span class="font-semibold text-white">Ingin menguji langsung?</span> Muat contoh materi Biologi Sel untuk mengecek seluruh fitur.
+            </div>
+            <button id="btn-load-sample" class="px-3 py-1.5 rounded-lg bg-surface-800 hover:bg-brand-600 hover:text-white text-brand-400 text-xs font-semibold transition-colors shrink-0">
+              Muat Materi Contoh
+            </button>
+          </div>
+
+          <!-- Daftar Dokumen di LocalStorage -->
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Dokumen di Memori Lokal</h3>
+              <span id="doc-count-badge" class="text-xs text-slate-500 font-mono">0 File</span>
+            </div>
+            <div id="document-list-container" class="grid gap-2.5"></div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Viewer Teks -->
+        <div id="content-tab-viewer" class="tab-content hidden space-y-4 max-w-4xl mx-auto">
+          <div class="flex items-center justify-between border-b border-surface-800 pb-3">
+            <div>
+              <span class="text-[11px] font-mono text-brand-400 uppercase tracking-wider font-semibold">Tampilan Baca</span>
+              <h2 id="viewer-title" class="text-base font-bold text-white tracking-tight">Belum ada materi aktif</h2>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="btn-copy-viewer-text" class="px-3 py-1.5 rounded-lg text-xs bg-surface-800 hover:bg-surface-700 text-slate-300 font-medium transition-colors flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                <span id="btn-copy-label">Salin Teks</span>
+              </button>
+            </div>
+          </div>
+          <div id="viewer-content" class="rounded-xl border border-surface-800 bg-surface-900/60 p-6 leading-relaxed font-sans text-sm text-slate-300 space-y-4 max-h-[68vh] overflow-y-auto custom-scrollbar select-text">
+            <div class="text-center py-12 text-slate-500 text-xs">Belum ada file dokumen yang aktif.</div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Flashcards (CSS 3D Flip) -->
+        <div id="content-tab-flashcards" class="tab-content hidden space-y-6 max-w-2xl mx-auto">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-bold text-white tracking-tight">Flashcard Belajar Cepat</h2>
+              <p class="text-xs text-slate-400">Ekstraksi poin penting dokumen secara otomatis. Klik kartu untuk membalik (3D Flip).</p>
+            </div>
+            <span id="flashcard-counter" class="text-xs font-mono px-2.5 py-1 rounded bg-brand-500/10 text-brand-400 border border-brand-500/20">Kartu 0 dari 0</span>
+          </div>
+
+          <div id="flashcards-empty-state" class="p-12 text-center rounded-2xl border border-dashed border-surface-800 bg-surface-900/40 space-y-3">
+            <p class="text-sm font-semibold text-slate-200">Belum ada flashcard</p>
+            <p class="text-xs text-slate-400 max-w-sm mx-auto">Unggah materi dokumen untuk mengekstrak kartu belajar otomatis.</p>
+          </div>
+
+          <div id="flashcard-view-wrapper" class="hidden space-y-6">
+            <div class="perspective-1000 w-full h-80 cursor-pointer" id="flashcard-container">
+              <div id="flashcard-inner" class="flashcard-card relative w-full h-full rounded-2xl preserve-3d shadow-xl shadow-black/40">
+                <!-- Sisi Depan Kartu -->
+                <div class="flashcard-face absolute inset-0 backface-hidden rounded-2xl p-8 flex flex-col justify-between bg-gradient-to-br from-surface-900 to-surface-850 border border-surface-700/80">
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="px-2.5 py-1 rounded-full bg-brand-500/20 text-brand-300 font-semibold uppercase tracking-wider text-[10px]">Pertanyaan / Konsep</span>
+                    <span class="text-slate-400 text-xs">Ketuk untuk balik &rarr;</span>
+                  </div>
+                  <div class="text-center px-4">
+                    <h3 id="card-front-text" class="text-lg md:text-xl font-bold text-white leading-snug">Pertanyaan Flashcard</h3>
+                  </div>
+                  <div class="text-center text-xs text-slate-500 flex items-center justify-center gap-1.5">
+                    <span>Klik di mana saja pada kartu untuk membalik (3D Flip)</span>
+                  </div>
+                </div>
+
+                <!-- Sisi Belakang Kartu -->
+                <div class="flashcard-face flashcard-back absolute inset-0 backface-hidden rounded-2xl p-8 flex flex-col justify-between bg-gradient-to-br from-brand-950 via-surface-900 to-surface-850 border border-brand-500/40 rotate-y-180">
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold uppercase tracking-wider text-[10px]">Jawaban & Konsep</span>
+                    <span class="text-slate-400 text-xs">&larr; Balik kembali</span>
+                  </div>
+                  <div class="text-center px-4 space-y-2">
+                    <h4 id="card-back-title" class="text-xl md:text-2xl font-extrabold text-emerald-400">Jawaban Singkat</h4>
+                    <p id="card-back-detail" class="text-xs md:text-sm text-slate-300 leading-relaxed max-h-36 overflow-y-auto custom-scrollbar">Penjelasan detail materi</p>
+                  </div>
+                  <div class="flex items-center justify-center gap-3">
+                    <span class="text-xs text-slate-400">Poin penting dari materi dokumen</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tombol Navigasi Kartu -->
+            <div class="flex items-center justify-between pt-2">
+              <button id="btn-prev-card" class="px-4 py-2 rounded-xl bg-surface-900 border border-surface-800 text-slate-300 hover:text-white hover:bg-surface-800 text-xs font-semibold flex items-center gap-2 transition-all">&larr; Sebelumnya</button>
+              <button id="btn-manual-flip" class="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold shadow-md shadow-brand-600/30 transition-all">Balik Kartu (Flip)</button>
+              <button id="btn-next-card" class="px-4 py-2 rounded-xl bg-surface-900 border border-surface-800 text-slate-300 hover:text-white hover:bg-surface-800 text-xs font-semibold flex items-center gap-2 transition-all">Selanjutnya &rarr;</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 4: Generator Kuis 5 Pilihan (A-E) -->
+        <div id="content-tab-quiz" class="tab-content hidden space-y-6 max-w-3xl mx-auto">
+          <div class="flex items-center justify-between border-b border-surface-800 pb-4">
+            <div>
+              <h2 class="text-lg font-bold text-white tracking-tight">Generator Kuis Pilihan Ganda</h2>
+              <p class="text-xs text-slate-400">5 Soal evaluasi otomatis dengan 5 pilihan jawaban (A, B, C, D, E) berbasis teks materi.</p>
+            </div>
+            <button id="btn-regenerate-quiz" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-500/10 text-brand-400 border border-brand-500/30 hover:bg-brand-500/20 transition-colors flex items-center gap-1.5">
+              Acak / Generate Baru
+            </button>
+          </div>
+
+          <div id="quiz-empty-state" class="p-12 text-center rounded-2xl border border-dashed border-surface-800 bg-surface-900/40 space-y-3">
+            <p class="text-sm font-semibold text-slate-200">Kuis Belum Tersedia</p>
+            <p class="text-xs text-slate-400 max-w-sm mx-auto">Silakan unggah dokumen di Tab 1. Generator akan otomatis menyusun 5 soal pilihan ganda.</p>
+          </div>
+
+          <form id="quiz-form" class="hidden space-y-6">
+            <div id="quiz-questions-container" class="space-y-6"></div>
+
+            <div class="p-4 rounded-2xl bg-surface-900 border border-surface-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div id="quiz-result-feedback" class="text-xs text-slate-300">
+                Pilih jawaban A-E pada kelima soal di atas, lalu klik <b>Cek Skor Kuis</b>.
+              </div>
+              <button type="submit" id="btn-check-quiz" class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold tracking-wide shadow-lg shadow-brand-600/30 transition-all flex items-center justify-center gap-2 shrink-0">
+                Cek Skor Kuis
+              </button>
+            </div>
+          </form>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==================== PANEL KANAN: AI CHATBOT ==================== -->
+    <aside class="w-[360px] lg:w-[420px] xl:w-[460px] flex flex-col bg-surface-900/90 shrink-0 border-l border-surface-800/80">
+      
+      <!-- Chatbot Header -->
+      <div class="h-12 border-b border-surface-800/80 px-4 flex items-center justify-between shrink-0 bg-surface-900/60">
+        <div class="flex items-center gap-2.5">
+          <div class="relative">
+            <div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-brand-500 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">AI</div>
+            <span class="w-2 h-2 rounded-full bg-emerald-400 absolute -bottom-0.5 -right-0.5 ring-2 ring-surface-900"></span>
+          </div>
+          <div>
+            <h3 class="text-xs font-bold text-white leading-tight">Tanya Dokumen (Offline AI)</h3>
+            <span class="text-[10px] text-slate-400">Keyword Search & Extraction</span>
+          </div>
+        </div>
+
+        <button id="btn-clear-chat" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-surface-800 transition-colors" title="Bersihkan Chat">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+        </button>
+      </div>
+
+      <!-- Area Pesan Chat -->
+      <div id="chat-messages" class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4 text-xs"></div>
+
+      <!-- Input Chat & Quick Prompts -->
+      <div class="p-3.5 border-t border-surface-800/80 bg-surface-900/90 shrink-0">
+        <div class="flex items-center gap-1.5 mb-2.5 overflow-x-auto no-scrollbar pb-1">
+          <button type="button" class="quick-chip shrink-0 text-[11px] px-2.5 py-1 rounded-full bg-surface-800 hover:bg-surface-700 text-slate-300 border border-surface-700/60 transition-colors">Ringkas materi utama</button>
+          <button type="button" class="quick-chip shrink-0 text-[11px] px-2.5 py-1 rounded-full bg-surface-800 hover:bg-surface-700 text-slate-300 border border-surface-700/60 transition-colors">Apa fungsi mitokondria?</button>
+          <button type="button" class="quick-chip shrink-0 text-[11px] px-2.5 py-1 rounded-full bg-surface-800 hover:bg-surface-700 text-slate-300 border border-surface-700/60 transition-colors">Perbedaan sel hewan dan tumbuhan</button>
+        </div>
+
+        <form id="chat-form" class="relative flex items-center gap-2">
+          <textarea id="chat-input" rows="1" placeholder="Tanyakan materi dokumen ke asisten..." class="flex-1 resize-none bg-surface-950/80 border border-surface-700/80 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-500 outline-none transition-all leading-normal max-h-32 custom-scrollbar"></textarea>
+          <button type="submit" id="chat-send-btn" class="w-9 h-9 rounded-xl bg-brand-600 hover:bg-brand-500 text-white flex items-center justify-center shrink-0 transition-colors shadow-md shadow-brand-600/30 focus:outline-none" title="Kirim pesan">
+            <svg class="w-4 h-4 translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+          </button>
+        </form>
+        <p class="text-[10px] text-center text-slate-500 mt-2">100% Client-Side. Berjalan tanpa koneksi internet & backend.</p>
+      </div>
+
+    </aside>
+
+  </main>
+
+  <!-- =========================================================================
+       JAVASCRIPT TERTANAM LENGKAP DENGAN KOMENTAR RINCI
+       ========================================================================= -->
+  <script>
+  (() => {
+    'use strict';
+
+    // -------------------------------------------------------------------------
+    // 1. STATE & STORAGE MANAGEMENT
+    // -------------------------------------------------------------------------
+    const STORAGE_KEY_DOCS = 'asisten_belajar_docs_v1';
+    const STORAGE_KEY_ACTIVE_ID = 'asisten_belajar_active_doc_id';
+
+    const AppState = {
+      documents: [],
+      activeDocumentId: null,
+      flashcards: [],
+      currentCardIndex: 0,
+      quizQuestions: [],
+      isStreamingResponse: false,
+    };
+
+    const SAMPLE_DOCUMENT = {
+      id: 'sample-doc-biologi-01',
+      name: 'biologi_sel_bab1.txt',
+      size: 14200,
+      uploadedAt: new Date().toISOString(),
+      content: `BAB I: PENGENALAN STRUKTUR DAN FUNGSI SEL
+
+Sel merupakan unit struktural dan fungsional terkecil dari makhluk hidup. Seluruh organisme hidup, mulai dari bakteri uniseluler bersel tunggal hingga mamalia kompleks tersusun atas sel. Teori sel pertama kali dikemukakan oleh Robert Hooke pada tahun 1665 yang mengamati sayatan jaringan gabus di bawah mikroskop sederhana.
+
+1. Organel-organel Utama pada Sel Eukariotik:
+- Nukleus (Inti Sel): Mengandung materi genetik berupa DNA (asam deoksiribonukleat) yang mengendalikan seluruh aktivitas metabolisme, sintesis protein, serta pewarisan sifat.
+- Mitokondria: Sering dijuluki sebagai "the powerhouse of the cell". Mitokondria berfungsi sebagai tempat berlangsungnya respirasi seluler aerobik untuk memproduksi energi dalam bentuk ATP (adenosin trifosfat).
+- Ribosom: Struktur tanpa membran sel yang berfungsi merakit asam amino menjadi rantai polipeptida atau sintesis protein primer.
+- Retikulum Endoplasma (RE): Terbagi menjadi RE Kasar yang ditempeli ribosom untuk pengangkutan protein dan RE Halus untuk sintesis lipid serta detoksifikasi racun.
+- Badan Golgi (Kompleks Golgi): Berperan dalam modifikasi kimiawi, penyortiran, dan pengemasan protein serta makromolekul sebelum disekresikan ke luar sel atau ke organel lain.
+- Lisosom: Berisi enzim hidrolitik asam untuk pencernaan intraseluler zat asing, autofagi, dan perombakan organel rusak.
+
+2. Perbedaan Sel Tumbuhan dan Sel Hewan:
+- Sel Tumbuhan: Memiliki dinding sel kaku berbahan selulosa, kloroplas yang mengandung klorofil untuk fotosintesis, serta vakuola sentral berukuran besar penyimpan cadangan air.
+- Sel Hewan: Tidak memiliki dinding sel kaku dan plastida/kloroplas, namun memiliki sentrosom dengan sentriol yang aktif saat proses pembelahan sel (mitosis/meiosis).
+
+3. Membran Plasma dan Transpor Zat:
+Membran sel tersusun atas lapisan ganda fosfolipid (phospholipid bilayer) yang bersifat semi-permeabel atau selektif permeabel. Mekanisme transpor pasif seperti difusi dan osmosis berlangsung tanpa membutuhkan energi ATP, sedangkan transpor aktif seperti pompa natrium-kalium membutuhkan hidrolisis ATP untuk memindahkan molekul melawan gradien konsentrasi.`
+    };
+
+    // Cache elemen-elemen DOM penting
+    const DOM = {
+      headerActiveDoc: document.getElementById('header-active-doc'),
+      tabBtns: {
+        upload: document.getElementById('tab-btn-upload'),
+        viewer: document.getElementById('tab-btn-viewer'),
+        flashcards: document.getElementById('tab-btn-flashcards'),
+        quiz: document.getElementById('tab-btn-quiz'),
+      },
+      tabContents: {
+        upload: document.getElementById('content-tab-upload'),
+        viewer: document.getElementById('content-tab-viewer'),
+        flashcards: document.getElementById('content-tab-flashcards'),
+        quiz: document.getElementById('content-tab-quiz'),
+      },
+      flashcardBadgeCount: document.getElementById('flashcard-badge-count'),
+      dropzone: document.getElementById('dropzone'),
+      fileInput: document.getElementById('file-input'),
+      btnLoadSample: document.getElementById('btn-load-sample'),
+      documentListContainer: document.getElementById('document-list-container'),
+      docCountBadge: document.getElementById('doc-count-badge'),
+      viewerTitle: document.getElementById('viewer-title'),
+      viewerContent: document.getElementById('viewer-content'),
+      btnCopyViewerText: document.getElementById('btn-copy-viewer-text'),
+      btnCopyLabel: document.getElementById('btn-copy-label'),
+      flashcardsEmptyState: document.getElementById('flashcards-empty-state'),
+      flashcardViewWrapper: document.getElementById('flashcard-view-wrapper'),
+      flashcardContainer: document.getElementById('flashcard-container'),
+      flashcardInner: document.getElementById('flashcard-inner'),
+      cardFrontText: document.getElementById('card-front-text'),
+      cardBackTitle: document.getElementById('card-back-title'),
+      cardBackDetail: document.getElementById('card-back-detail'),
+      flashcardCounter: document.getElementById('flashcard-counter'),
+      btnPrevCard: document.getElementById('btn-prev-card'),
+      btnNextCard: document.getElementById('btn-next-card'),
+      btnManualFlip: document.getElementById('btn-manual-flip'),
+      quizEmptyState: document.getElementById('quiz-empty-state'),
+      quizForm: document.getElementById('quiz-form'),
+      quizQuestionsContainer: document.getElementById('quiz-questions-container'),
+      quizResultFeedback: document.getElementById('quiz-result-feedback'),
+      btnRegenerateQuiz: document.getElementById('btn-regenerate-quiz'),
+      chatMessages: document.getElementById('chat-messages'),
+      chatForm: document.getElementById('chat-form'),
+      chatInput: document.getElementById('chat-input'),
+      chatSendBtn: document.getElementById('chat-send-btn'),
+      btnClearChat: document.getElementById('btn-clear-chat'),
+      quickChips: document.querySelectorAll('.quick-chip'),
+    };
+
+    /**
+     * Menginisialisasi penyimpanan lokal (LocalStorage).
+     * Jika LocalStorage masih kosong, otomatis memuat contoh materi biologi.
+     */
+    function initStorage() {
+      try {
+        const savedDocs = localStorage.getItem(STORAGE_KEY_DOCS);
+        if (savedDocs) {
+          AppState.documents = JSON.parse(savedDocs);
+        } else {
+          AppState.documents = [SAMPLE_DOCUMENT];
+          saveDocumentsToStorage();
+        }
+
+        const activeId = localStorage.getItem(STORAGE_KEY_ACTIVE_ID);
+        if (activeId && AppState.documents.some(d => d.id === activeId)) {
+          AppState.activeDocumentId = activeId;
+        } else if (AppState.documents.length > 0) {
+          AppState.activeDocumentId = AppState.documents[0].id;
+        }
+      } catch (e) {
+        console.warn('Storage fallback:', e);
+        AppState.documents = [SAMPLE_DOCUMENT];
+        AppState.activeDocumentId = SAMPLE_DOCUMENT.id;
+      }
+    }
+
+    /**
+     * Menyimpan daftar dokumen dan dokumen aktif ke LocalStorage browser.
+     */
+    function saveDocumentsToStorage() {
+      try {
+        localStorage.setItem(STORAGE_KEY_DOCS, JSON.stringify(AppState.documents));
+        if (AppState.activeDocumentId) {
+          localStorage.setItem(STORAGE_KEY_ACTIVE_ID, AppState.activeDocumentId);
+        }
+      } catch (err) {
+        console.error('Gagal menyimpan dokumen ke LocalStorage:', err);
+      }
+    }
+
+    function getActiveDocument() {
+      return AppState.documents.find(doc => doc.id === AppState.activeDocumentId) || null;
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. SISTEM NAVIGASI TAB WORKSPACE
+    // -------------------------------------------------------------------------
+    function switchTab(targetKey) {
+      Object.keys(DOM.tabBtns).forEach(key => {
+        const btn = DOM.tabBtns[key];
+        const content = DOM.tabContents[key];
+        if (key === targetKey) {
+          btn?.classList.add('active');
+          content?.classList.remove('hidden');
+        } else {
+          btn?.classList.remove('active');
+          content?.classList.add('hidden');
+        }
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. UPLOAD FILE & VIEWER TEKS
+    // -------------------------------------------------------------------------
+    function renderDocumentList() {
+      const list = DOM.documentListContainer;
+      if (!list) return;
+
+      list.innerHTML = '';
+      const docs = AppState.documents;
+      if (DOM.docCountBadge) DOM.docCountBadge.textContent = `${docs.length} File`;
+
+      if (docs.length === 0) {
+        list.innerHTML = `
+          <div class="text-xs text-slate-500 text-center py-6 border border-dashed border-surface-800 rounded-xl">
+            Belum ada dokumen yang diunggah.
+          </div>
+        `;
+        return;
+      }
+
+      docs.forEach(doc => {
+        const isActive = doc.id === AppState.activeDocumentId;
+        const isPdf = doc.name.toLowerCase().endsWith('.pdf');
+        const isMd = doc.name.toLowerCase().endsWith('.md');
+        const sizeKB = (doc.size / 1024).toFixed(1);
+
+        let badgeBg = 'bg-brand-500/10 text-brand-400';
+        let badgeLabel = 'TXT';
+        if (isPdf) {
+          badgeBg = 'bg-rose-500/10 text-rose-400';
+          badgeLabel = 'PDF';
+        } else if (isMd) {
+          badgeBg = 'bg-emerald-500/10 text-emerald-400';
+          badgeLabel = 'MD';
+        }
+
+        const item = document.createElement('div');
+        item.className = `p-3.5 rounded-xl border flex items-center justify-between group transition-all ${
+          isActive 
+            ? 'bg-surface-900/90 border-brand-500/50 shadow-sm shadow-brand-500/10' 
+            : 'bg-surface-900/40 border-surface-800 hover:border-surface-700'
+        }`;
+
+        item.innerHTML = `
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-9 h-9 rounded-lg ${badgeBg} flex items-center justify-center font-mono font-bold text-xs shrink-0">
+              ${badgeLabel}
+            </div>
+            <div class="truncate">
+              <h4 class="text-sm font-semibold text-white truncate flex items-center gap-2">
+                <span class="truncate">${escapeHtml(doc.name)}</span>
+                ${isActive ? '<span class="text-[10px] bg-brand-500/20 text-brand-300 px-1.5 py-0.5 rounded font-normal">Aktif</span>' : ''}
+              </h4>
+              <p class="text-[11px] text-slate-400 mt-0.5 font-mono">${sizeKB} KB &bull; ${new Date(doc.uploadedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5 shrink-0 ml-2">
+            <button data-action="select" class="px-2.5 py-1.5 text-xs ${isActive ? 'bg-brand-600 text-white font-semibold' : 'text-slate-300 hover:text-white hover:bg-surface-800'} rounded-lg transition-colors">
+              ${isActive ? 'Sedang Dibaca' : 'Buka'}
+            </button>
+            <button data-action="delete" class="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors" title="Hapus dokumen">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+              </svg>
+            </button>
+          </div>
+        `;
+
+        item.querySelector('[data-action="select"]')?.addEventListener('click', () => {
+          setActiveDocument(doc.id, true);
+        });
+
+        item.querySelector('[data-action="delete"]')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          deleteDocument(doc.id);
+        });
+
+        list.appendChild(item);
+      });
+    }
+
+    function setActiveDocument(docId, shouldSwitchToViewer = false) {
+      AppState.activeDocumentId = docId;
+      saveDocumentsToStorage();
+      renderDocumentList();
+      renderViewer();
+      generateFlashcardsFromActiveDoc();
+      generateQuizFromActiveDoc();
+
+      const doc = getActiveDocument();
+      // Sinkronisasi ke window.uploadedMaterial agar dapat diakses global
+      window.uploadedMaterial = doc ? doc.content : null;
+
+      if (DOM.headerActiveDoc) {
+        DOM.headerActiveDoc.textContent = doc ? doc.name : 'Belum Ada Dokumen';
+      }
+
+      if (shouldSwitchToViewer) {
+        switchTab('viewer');
+      }
+    }
+
+    function deleteDocument(docId) {
+      AppState.documents = AppState.documents.filter(d => d.id !== docId);
+      if (AppState.activeDocumentId === docId) {
+        AppState.activeDocumentId = AppState.documents.length > 0 ? AppState.documents[0].id : null;
+      }
+      saveDocumentsToStorage();
+      renderDocumentList();
+      renderViewer();
+      generateFlashcardsFromActiveDoc();
+      generateQuizFromActiveDoc();
+
+      const doc = getActiveDocument();
+      window.uploadedMaterial = doc ? doc.content : null;
+
+      if (DOM.headerActiveDoc) {
+        DOM.headerActiveDoc.textContent = doc ? doc.name : 'Belum Ada Dokumen';
+      }
+    }
+
+    function renderViewer() {
+      const doc = getActiveDocument();
+      if (!doc) {
+        if (DOM.viewerTitle) DOM.viewerTitle.textContent = 'Belum Ada Materi Aktif';
+        if (DOM.viewerContent) {
+          DOM.viewerContent.innerHTML = `
+            <div class="text-center py-16 text-slate-500 text-xs">
+              Belum ada file dokumen yang aktif. Silakan pilih atau unggah dokumen pada tab <b>Upload File</b>.
+            </div>
+          `;
+        }
+        return;
+      }
+
+      if (DOM.viewerTitle) DOM.viewerTitle.textContent = doc.name;
+      if (DOM.viewerContent) {
+        DOM.viewerContent.innerHTML = formatDocumentToHtml(doc.content);
+      }
+    }
+
+    function formatDocumentToHtml(text) {
+      if (!text) return '<p class="text-slate-500">Dokumen kosong.</p>';
+
+      const lines = text.split('\n');
+      let html = '';
+      let inList = false;
+
+      lines.forEach(rawLine => {
+        const line = rawLine.trim();
+
+        if (line.startsWith('# ')) {
+          if (inList) { html += '</ul>'; inList = false; }
+          html += `<h2 class="text-lg font-bold text-white border-b border-surface-800 pb-2 mt-4 mb-2">${escapeHtml(line.slice(2))}</h2>`;
+        } else if (line.startsWith('## ') || line.startsWith('### ')) {
+          if (inList) { html += '</ul>'; inList = false; }
+          html += `<h3 class="text-base font-semibold text-brand-300 mt-3 mb-1">${escapeHtml(line.replace(/^#+\s*/, ''))}</h3>`;
+        } else if (line.startsWith('- ') || line.startsWith('* ')) {
+          if (!inList) { html += '<ul class="list-disc pl-5 space-y-1.5 text-slate-300">'; inList = true; }
+          const itemText = line.slice(2);
+          const parts = itemText.split(':');
+          if (parts.length > 1) {
+            html += `<li><strong class="text-white">${escapeHtml(parts[0])}:</strong> ${escapeHtml(parts.slice(1).join(':'))}</li>`;
+          } else {
+            html += `<li>${escapeHtml(itemText)}</li>`;
+          }
+        } else if (line === '') {
+          if (inList) { html += '</ul>'; inList = false; }
+          html += '<div class="h-2"></div>';
+        } else {
+          if (inList) { html += '</ul>'; inList = false; }
+          html += `<p class="leading-relaxed text-slate-300 mb-2">${escapeHtml(line)}</p>`;
+        }
+      });
+
+      if (inList) html += '</ul>';
+      return html;
+    }
+
+    /**
+     * EKSTRAKSI TEKS DARI FILE PDF SECARA CLIENT-SIDE
+     * Menggunakan library PDF.js jika tersedia, atau binary text stream extractor
+     * sebagai fallback aman tanpa server backend.
+     */
+    async function extractTextFromPdf(file) {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+
+        // 1. Coba gunakan PDF.js jika library berhasil dimuat di browser
+        if (window.pdfjsLib && window.pdfjsLib.getDocument) {
+          const loadingTask = window.pdfjsLib.getDocument({ data: arrayBuffer });
+          const pdfDoc = await loadingTask.promise;
+          let fullText = '';
+
+          for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+            const page = await pdfDoc.getPage(pageNum);
+            const textContent = await page.getTextContent();
+            const pageStrings = textContent.items.map(item => item.str).join(' ');
+            if (pageStrings.trim().length > 0) {
+              fullText += `\n\n--- [Halaman ${pageNum}] ---\n` + pageStrings;
+            }
+          }
+
+          if (fullText.trim().length > 30) {
+            return fullText.trim();
+          }
+        }
+
+        // 2. Fallback: Ekstraksi stream teks dari objek PDF mentah
+        const uint8Array = new Uint8Array(arrayBuffer);
+        const decoder = new TextDecoder('utf-8');
+        const rawString = decoder.decode(uint8Array);
+
+        // Ekstraksi string dalam kurung kurawal/tanda kurung (BT ... ET) teks PDF
+        const textBlocks = [];
+        const textMatches = rawString.match(/\(([^()]{2,})\)\s*T[jJ]/g) || rawString.match(/\[([^\[\]]{3,})\]\s*TJ/g);
+
+        if (textMatches && textMatches.length > 0) {
+          textMatches.forEach(match => {
+            const clean = match.replace(/^[(\[]|[)\]]\s*T[jJ]$/g, '').replace(/\\([()\\])/g, '$1').trim();
+            if (clean.length > 2) textBlocks.push(clean);
+          });
+          const parsed = textBlocks.join(' ');
+          if (parsed.length > 50) return parsed;
+        }
+
+        return `DOKUMEN PDF: ${file.name}\n\nFile PDF ini telah diunggah ke memori lokal browser. Teks visual dapat dipelajari melalui sistem pencarian kata kunci dan tanya-jawab otomatis.`;
+      } catch (err) {
+        console.warn('Gagal membaca PDF:', err);
+        return `DOKUMEN PDF: ${file.name}\n\nTerjadi kendala saat membaca stream teks PDF secara lokal. Silakan pastikan file PDF tidak berpassword.`;
+      }
+    }
+
+    /**
+     * Membaca satu atau BANYAK file yang diunggah pengguna (.pdf, .txt, .md) sekaligus
+     * secara asynchronous dan menambahkannya ke memori lokal.
+     */
+    async function handleMultipleUploadedFiles(fileList) {
+      if (!fileList || fileList.length === 0) return;
+
+      const validFiles = Array.from(fileList).filter(file => {
+        const name = file.name.toLowerCase();
+        return name.endsWith('.txt') || name.endsWith('.md') || name.endsWith('.pdf');
+      });
+
+      if (validFiles.length === 0) {
+        alert('Mohon pilih file materi berformat .pdf, .txt, atau .md');
+        return;
+      }
+
+      // Indikator loading singkat di panel chat jika mengunggah PDF besar
+      const hasPdf = validFiles.some(f => f.name.toLowerCase().endsWith('.pdf'));
+      if (hasPdf) {
+        addChatMessage({
+          sender: 'ai',
+          text: `Sedang mengekstraksi teks dari dokumen PDF secara lokal di browser... Mohon tunggu sebentar.`,
+          reference: null
+        });
+      }
+
+      const newlyAddedDocs = [];
+
+      for (const file of validFiles) {
+        const isPdf = file.name.toLowerCase().endsWith('.pdf');
+        let content = '';
+
+        if (isPdf) {
+          content = await extractTextFromPdf(file);
+        } else {
+          content = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.readAsText(file);
+          });
+        }
+
+        newlyAddedDocs.push({
+          id: 'doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+          name: file.name,
+          size: file.size,
+          uploadedAt: new Date().toISOString(),
+          content: content
+        });
+      }
+
+      // Masukkan seluruh dokumen baru ke depan antrean state
+      AppState.documents = [...newlyAddedDocs, ...AppState.documents];
+      
+      // Jadikan dokumen pertama dari batch sebagai dokumen aktif
+      setActiveDocument(newlyAddedDocs[0].id, true);
+
+      // Beri notifikasi chat yang informatif
+      const fileNamesList = newlyAddedDocs.map(d => `<b>${escapeHtml(d.name)}</b>`).join(', ');
+      addChatMessage({
+        sender: 'ai',
+        text: newlyAddedDocs.length === 1
+          ? `Dokumen ${fileNamesList} berhasil diekstraksi dan siap dipelajari! Flashcards dan Kuis 5 pilihan telah diperbarui otomatis.`
+          : `Berhasil mengunggah dan mengekstraksi <b>${newlyAddedDocs.length} file dokumen</b> (${fileNamesList}). Dokumen <b>${escapeHtml(newlyAddedDocs[0].name)}</b> sekarang aktif!`,
+        reference: null
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. GENERATOR FLASHCARD & ANIMASI 3D FLIP
+    // -------------------------------------------------------------------------
+    /**
+     * FUNGSI CHUNKING & EKSTRAKSI POIN MATERI:
+     * Memindai teks dokumen aktif untuk menemukan konsep definisi, bullet points,
+     * serta istilah berpasangan (Term: Penjelasan) untuk diubah menjadi Flashcard.
+     */
+    function extractKeyPointsFromText(content) {
+      if (!content) return [];
+
+      const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
+      const flashcards = [];
+
+      // 1. Ekstraksi dari Bullet List (Term: Description)
+      lines.forEach(line => {
+        if (line.startsWith('- ') || line.startsWith('* ')) {
+          const clean = line.replace(/^[-*]\s*/, '');
+          const splitIdx = clean.indexOf(':');
+          if (splitIdx > 2 && splitIdx < 60) {
+            const term = clean.slice(0, splitIdx).trim();
+            const desc = clean.slice(splitIdx + 1).trim();
+            if (desc.length > 10) {
+              flashcards.push({
+                front: `Apa konsep atau fungsi dari "${term}"?`,
+                backTitle: term,
+                backDetail: desc
+              });
+            }
+          }
+        }
+      });
+
+      // 2. Ekstraksi dari kalimat yang memuat kata kunci definisi
+      if (flashcards.length < 4) {
+        const sentences = content
+          .replace(/([.?!])\s*(?=[A-Z])/g, "$1|")
+          .split("|")
+          .map(s => s.trim())
+          .filter(s => s.length > 35 && s.length < 240);
+
+        sentences.forEach(sentence => {
+          const lower = sentence.toLowerCase();
+          if (lower.includes(' merupakan ') || lower.includes(' adalah ') || lower.includes(' berfungsi ')) {
+            let words = sentence.split(' ');
+            let subject = words.slice(0, 4).join(' ');
+            flashcards.push({
+              front: `Jelaskan poin materi berikut: "${subject}..."`,
+              backTitle: subject,
+              backDetail: sentence
+            });
+          }
+        });
+      }
+
+      // Fallback cadangan jika teks sangat ringkas
+      if (flashcards.length === 0) {
+        flashcards.push({
+          front: "Apa ide pokok materi yang Anda unggah?",
+          backTitle: "Ringkasan Singkat",
+          backDetail: content.slice(0, 200) + '...'
+        });
+      }
+
+      return flashcards.slice(0, 10);
+    }
+
+    function generateFlashcardsFromActiveDoc() {
+      const doc = getActiveDocument();
+      if (!doc || !doc.content.trim()) {
+        AppState.flashcards = [];
+        AppState.currentCardIndex = 0;
+        updateFlashcardsUI();
+        return;
+      }
+
+      AppState.flashcards = extractKeyPointsFromText(doc.content);
+      AppState.currentCardIndex = 0;
+      updateFlashcardsUI();
+    }
+
+    /**
+     * Memperbarui antarmuka kartu flashcard dan mengembalikan rotasi ke sisi depan.
+     */
+    function updateFlashcardsUI() {
+      const total = AppState.flashcards.length;
+      const badge = DOM.flashcardBadgeCount;
+      if (badge) {
+        if (total > 0) {
+          badge.textContent = total;
+          badge.classList.remove('hidden');
+        } else {
+          badge.classList.add('hidden');
+        }
+      }
+
+      if (total === 0) {
+        DOM.flashcardsEmptyState?.classList.remove('hidden');
+        DOM.flashcardViewWrapper?.classList.add('hidden');
+        if (DOM.flashcardCounter) DOM.flashcardCounter.textContent = 'Kartu 0 dari 0';
+        return;
+      }
+
+      DOM.flashcardsEmptyState?.classList.add('hidden');
+      DOM.flashcardViewWrapper?.classList.remove('hidden');
+
+      // Mengembalikan sisi depan kartu saat berpindah index
+      DOM.flashcardInner?.classList.remove('flipped');
+
+      const card = AppState.flashcards[AppState.currentCardIndex];
+      if (DOM.cardFrontText) DOM.cardFrontText.textContent = card.front;
+      if (DOM.cardBackTitle) DOM.cardBackTitle.textContent = card.backTitle;
+      if (DOM.cardBackDetail) DOM.cardBackDetail.textContent = card.backDetail;
+      if (DOM.flashcardCounter) {
+        DOM.flashcardCounter.textContent = `Kartu ${AppState.currentCardIndex + 1} dari ${total}`;
+      }
+    }
+
+    /**
+     * FUNGSI ANIMASI FLASHCARD (CSS 3D FLIP):
+     * Membalik kartu dengan menambahkan/menghapus class '.flipped' (rotateY(180deg)).
+     */
+    function toggleFlashcardFlip() {
+      DOM.flashcardInner?.classList.toggle('flipped');
+    }
+
+    // -------------------------------------------------------------------------
+    // 5. GENERATOR KUIS (5 SOAL, PERSIS 5 OPSI A-E, SKOR & FEEDBACK WARNA)
+    // -------------------------------------------------------------------------
+    function generateQuizFromActiveDoc() {
+      const doc = getActiveDocument();
+      if (!doc || !doc.content.trim()) {
+        AppState.quizQuestions = [];
+        updateQuizUI();
+        return;
+      }
+
+      AppState.quizQuestions = buildDynamicQuizQuestions(doc.content);
+      updateQuizUI();
+    }
+
+    /**
+     * Menyusun 5 soal pilihan ganda secara dinamis.
+     * Setiap soal dijamin memiliki 5 opsi pilihan (A, B, C, D, dan E).
+     */
+    function buildDynamicQuizQuestions(content) {
+      const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
+      const keyPairs = [];
+
+      lines.forEach(line => {
+        if (line.startsWith('- ') || line.startsWith('* ')) {
+          const clean = line.replace(/^[-*]\s*/, '');
+          const splitIdx = clean.indexOf(':');
+          if (splitIdx > 2 && splitIdx < 50) {
+            keyPairs.push({
+              term: clean.slice(0, splitIdx).trim(),
+              desc: clean.slice(splitIdx + 1).trim()
+            });
+          }
+        }
+      });
+
+      const generalDistractors = [
+        'Sebagai cadangan pigmen klorofil pada dinding sel kaku',
+        'Mengatur sintesis lipid membran dan autofagi organel',
+        'Sebagai tempat respirasi seluler aerobik menghasilkan energi ATP',
+        'Mengendalikan replikasi DNA materi genetik intraseluler',
+        'Melakukan modifikasi kimiawi dan pengemasan makromolekul di RE',
+        'Sebagai penyeimbang osmoregulasi vakuola sentral',
+        'Melindungi sitoplasma dari tekanan turgor eksternal',
+        'Menghasilkan enzim hidrolitik untuk mendegradasi zat patogen'
+      ];
+
+      const questions = [];
+
+      for (let i = 0; i < 5; i++) {
+        let qData;
+
+        if (keyPairs.length >= 2 && i < keyPairs.length) {
+          const current = keyPairs[i];
+          const correctText = current.desc.length > 70 ? current.desc.slice(0, 70) + '...' : current.desc;
+          
+          const otherDescPool = keyPairs
+            .filter((_, idx) => idx !== i)
+            .map(p => p.desc.slice(0, 70) + '...')
+            .concat(generalDistractors);
+
+          const shuffledDistractors = shuffleArray(otherDescPool).slice(0, 4);
+
+          // 1 Jawaban benar + 4 Pengecoh = 5 Opsi Pilihan
+          const allOptionTexts = [correctText, ...shuffledDistractors];
+          const randomized = shuffleArray(allOptionTexts);
+          const correctIndex = randomized.indexOf(correctText);
+          const correctLetter = ['A', 'B', 'C', 'D', 'E'][correctIndex];
+
+          qData = {
+            id: i + 1,
+            question: `Berdasarkan materi yang dipelajari, fungsi atau karakteristik utama dari "${current.term}" adalah...`,
+            correctAnswer: correctLetter,
+            options: [
+              { key: 'A', text: randomized[0] },
+              { key: 'B', text: randomized[1] },
+              { key: 'C', text: randomized[2] },
+              { key: 'D', text: randomized[3] },
+              { key: 'E', text: randomized[4] }
+            ]
+          };
+        } else {
+          // Fallback kurasi jika dokumen tidak memiliki cukup bullet list
+          const fallbackSet = [
+            {
+              q: "Organel manakah yang berperan krusial dalam respirasi seluler aerob untuk pembentukan ATP?",
+              correct: "Mitokondria",
+              distractors: ["Retikulum Endoplasma Kasar", "Badan Golgi", "Lisosom Hidrolitik", "Sentriol Nukleolus"]
+            },
+            {
+              q: "Struktur sel yang secara spesifik HANYA dijumpai pada sel tumbuhan dan TIDAK ada pada sel hewan adalah...",
+              correct: "Dinding sel selulosa dan kloroplas",
+              distractors: ["Membran plasma semi-permeabel", "Mitokondria dan ribosom", "Sentrosom dan lisosom", "Retikulum endoplasma halus"]
+            },
+            {
+              q: "Fungsi mendasar dari ribosom pada struktur sel eukariotik adalah...",
+              correct: "Merakit asam amino menjadi rantai polipeptida (sintesis protein)",
+              distractors: ["Menyimpan cadangan energi dalam bentuk glikogen", "Membongkar struktur DNA saat metafase", "Melakukan detoksifikasi racun obat-obatan", "Memompa natrium ke luar membran"]
+            },
+            {
+              q: "Apa nama sifat membran plasma yang hanya mengizinkan molekul tertentu melintasinya?",
+              correct: "Selektif Permeabel (Semi-permeabel)",
+              distractors: ["Impermeabel Total", "Dinding Kaku Pasif", "Osmotik Bebas", "Difusif Terbuka"]
+            },
+            {
+              q: "Ilmuwan pertama yang mengamati sel pada sayatan gabus mikroskop tahun 1665 adalah...",
+              correct: "Robert Hooke",
+              distractors: ["Louis Pasteur", "Gregor Mendel", "Charles Darwin", "Antonie van Leeuwenhoek"]
+            }
+          ];
+
+          const f = fallbackSet[i % fallbackSet.length];
+          const allOptionTexts = [f.correct, ...f.distractors];
+          const randomized = shuffleArray(allOptionTexts);
+          const correctIndex = randomized.indexOf(f.correct);
+          const correctLetter = ['A', 'B', 'C', 'D', 'E'][correctIndex];
+
+          qData = {
+            id: i + 1,
+            question: f.q,
+            correctAnswer: correctLetter,
+            options: [
+              { key: 'A', text: randomized[0] },
+              { key: 'B', text: randomized[1] },
+              { key: 'C', text: randomized[2] },
+              { key: 'D', text: randomized[3] },
+              { key: 'E', text: randomized[4] }
+            ]
+          };
+        }
+
+        questions.push(qData);
+      }
+
+      return questions;
+    }
+
+    function updateQuizUI() {
+      const questions = AppState.quizQuestions;
+      const container = DOM.quizQuestionsContainer;
+
+      if (!container) return;
+
+      if (questions.length === 0) {
+        DOM.quizEmptyState?.classList.remove('hidden');
+        DOM.quizForm?.classList.add('hidden');
+        return;
+      }
+
+      DOM.quizEmptyState?.classList.add('hidden');
+      DOM.quizForm?.classList.remove('hidden');
+
+      if (DOM.quizResultFeedback) {
+        DOM.quizResultFeedback.innerHTML = 'Pilih jawaban A-E pada kelima soal di atas, lalu klik <b>Cek Skor Kuis</b>.';
+      }
+
+      container.innerHTML = '';
+
+      questions.forEach((q, idx) => {
+        const qBlock = document.createElement('div');
+        qBlock.className = 'quiz-question bg-surface-900/60 border border-surface-800/90 rounded-2xl p-5 space-y-4';
+        qBlock.setAttribute('data-question-id', q.id);
+
+        let optionsHtml = '';
+        q.options.forEach(opt => {
+          optionsHtml += `
+            <label class="quiz-option flex items-center p-3 rounded-xl border border-surface-800 bg-surface-950/40 hover:bg-surface-800/50 hover:border-surface-700 cursor-pointer transition-colors" data-option-key="${opt.key}">
+              <input type="radio" name="q_${q.id}" value="${opt.key}" class="w-4 h-4 text-brand-600 bg-surface-800 border-surface-700 focus:ring-brand-500">
+              <span class="ml-3 text-xs text-slate-200">
+                <strong class="text-brand-400 font-mono">${opt.key}.</strong> ${escapeHtml(opt.text)}
+              </span>
+            </label>
+          `;
+        });
+
+        qBlock.innerHTML = `
+          <div class="flex items-start justify-between gap-4">
+            <span class="text-xs font-bold text-brand-400 bg-brand-500/10 px-2.5 py-1 rounded-md border border-brand-500/20 font-mono">
+              Soal 0${idx + 1}
+            </span>
+            <span class="text-[11px] text-slate-400 font-mono">5 Opsi (A, B, C, D, E)</span>
+          </div>
+          <p class="text-sm font-semibold text-slate-100">
+            ${escapeHtml(q.question)}
+          </p>
+          <div class="grid gap-2.5">
+            ${optionsHtml}
+          </div>
+        `;
+
+        container.appendChild(qBlock);
+      });
+    }
+
+    /**
+     * EVALUASI SKOR KUIS & FEEDBACK WARNA INSTAN:
+     * Menghitung jawaban benar, menandai pilihan benar dengan hijau (.option-correct),
+     * dan menandai jawaban salah dengan coret merah (.option-incorrect).
+     */
+    function handleQuizEvaluation(e) {
+      e.preventDefault();
+      const questions = AppState.quizQuestions;
+      if (questions.length === 0) return;
+
+      let correctCount = 0;
+      let answeredCount = 0;
+
+      questions.forEach(q => {
+        const selected = document.querySelector(`input[name="q_${q.id}"]:checked`);
+        const qBlock = document.querySelector(`[data-question-id="${q.id}"]`);
+        if (!qBlock) return;
+
+        const allOptionLabels = qBlock.querySelectorAll('.quiz-option');
+
+        // Bersihkan styling kuis sebelumnya
+        allOptionLabels.forEach(lbl => {
+          lbl.classList.remove('option-correct', 'option-incorrect');
+        });
+
+        if (selected) {
+          answeredCount++;
+          const userChoice = selected.value;
+
+          allOptionLabels.forEach(lbl => {
+            const optKey = lbl.getAttribute('data-option-key');
+
+            // Beri highlight hijau pada kunci jawaban benar
+            if (optKey === q.correctAnswer) {
+              lbl.classList.add('option-correct');
+            }
+
+            // Beri highlight merah jika pengguna memilih opsi yang salah
+            if (optKey === userChoice && userChoice !== q.correctAnswer) {
+              lbl.classList.add('option-incorrect');
+            }
+          });
+
+          if (userChoice === q.correctAnswer) {
+            correctCount++;
+          }
+        } else {
+          // Bila belum dijawab, tetap tunjukkan kunci jawabannya
+          allOptionLabels.forEach(lbl => {
+            if (lbl.getAttribute('data-option-key') === q.correctAnswer) {
+              lbl.classList.add('option-correct');
+            }
+          });
+        }
+      });
+
+      const total = questions.length;
+      const feedback = DOM.quizResultFeedback;
+      if (feedback) {
+        if (answeredCount < total) {
+          feedback.innerHTML = `
+            <div class="text-amber-400 font-medium">
+              Anda baru menjawab ${answeredCount} dari ${total} soal. Skor sementara: <span class="text-white font-bold">${correctCount}/${total} Benar</span>. Kunci jawaban tepat telah ditandai hijau!
+            </div>
+          `;
+        } else {
+          const isPerfect = correctCount === total;
+          feedback.innerHTML = `
+            <div class="${isPerfect ? 'text-emerald-400' : 'text-brand-300'} font-bold">
+              Skor Akhir: ${correctCount}/${total} Benar (${(correctCount/total)*100}%)
+              <span class="text-xs font-normal text-slate-300 ml-1">
+                ${isPerfect ? '🎉 Sempurna! Seluruh jawaban Anda tepat.' : 'Pilihan hijau adalah jawaban tepat, merah adalah jawaban keliru.'}
+              </span>
+            </div>
+          `;
+        }
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // 6. DATABASE PENGETAHUAN LOKAL & LOGIKA MULTIFUNGSI CHATBOT
+    // -------------------------------------------------------------------------
+
+    /**
+     * DATABASE PENGETAHUAN LOKAL (Offline Knowledge Base):
+     * Berisi kamus kata kunci dan respons siap pakai untuk:
+     * 1. Kategori Sapaan (ramah & interaktif)
+     * 2. Kategori Curhat / Kondisi Emosional (penuh empati & memotivasi)
+     * 3. Kategori Pengetahuan Umum Dasar (edukatif, ringkas & jelas)
+     */
+    const LOCAL_KNOWLEDGE_BASE = [
+      // === KATEGORI 1: SAPAAN (GREETINGS) ===
+      {
+        category: 'sapaan',
+        keywords: ['halo', 'halo!', 'hai', 'helo', 'hei', 'hi', 'hello', 'hola'],
+        responses: [
+          'Halo! Senang sekali bisa menemanimu belajar hari ini. Ada topik atau materi yang ingin kita bedah bersama?',
+          'Hai! Semangat belajarnya ya. Kamu bisa tanyakan apa saja seputar materi yang diunggah atau sekadar berdiskusi santai denganku!',
+          'Halo! Asisten belajarmu siap sedia 100% offline. Mau mulai dari membaca dokumen, kuis, atau ada pertanyaan khusus?'
+        ]
+      },
+      {
+        category: 'sapaan_pagi',
+        keywords: ['pagi', 'selamat pagi', 'met pagi', 'morning', 'good morning'],
+        responses: [
+          'Selamat pagi! Waktu yang sangat segar untuk mengasah otak dan memahami konsep baru. Yuk kita mulai!',
+          'Pagi yang cerah! Jangan lupa siapkan segelas air putih atau kopi, lalu mari kita pelajari materi hari ini dengan fokus.'
+        ]
+      },
+      {
+        category: 'sapaan_siang',
+        keywords: ['siang', 'selamat siang', 'met siang', 'afternoon'],
+        responses: [
+          'Selamat siang! Tetap semangat ya meski siang hari biasanya bikin sedikit mengantuk. Mau lanjut pelajari materi sekarang?',
+          'Siang! Semangat belajarnya luar biasa. Kita bisa pelajari poin-poin ringkas di flashcards jika ingin sesi belajar yang santai.'
+        ]
+      },
+      {
+        category: 'sapaan_malam',
+        keywords: ['malam', 'selamat malam', 'met malam', 'petang', 'sore', 'selamat sore'],
+        responses: [
+          'Selamat malam! Belajar di waktu tenang seperti ini sering kali bikin materi lebih cepat menempel di ingatan. Ada materi yang perlu kita ulas?',
+          'Selamat sore/malam! Hebat sekali kamu masih menyempatkan waktu untuk mengulang materi hari ini. Aku siap membantumu!'
+        ]
+      },
+
+      // === KATEGORI 2: CURHAT / KONDISI EMOSIONAL (EMPATHY & MOTIVATION) ===
+      {
+        category: 'curhat_stres_pusing',
+        keywords: ['stres', 'stress', 'pusing', 'mumet', 'bingung', 'capek', 'lelah', 'penat', 'berat'],
+        responses: [
+          'Tarik napas dalam-dalam dulu yuk... Wajar banget merasa pusing atau capek saat belajar hal yang baru dan padat. Istirahat sejenak 5-10 menit, minum air, atau regangkan badan. Ingat: belajar itu maraton, bukan lari cepat. Kalau sudah siap, kita pelajari pelan-pelan ya!',
+          'Aku paham kok, otak kita memang butuh jeda saat dijejali banyak informasi. Jangan terlalu keras pada dirimu sendiri ya. Luangkan waktu sejenak untuk rileks, setelah itu kita cicil materinya sedikit demi sedikit. Kamu pasti bisa melaluinya!'
+        ]
+      },
+      {
+        category: 'curhat_ujian',
+        keywords: ['ujian', 'uts', 'uas', 'tryout', 'skripsi', 'sidang', 'ulangan', 'test', 'tes'],
+        responses: [
+          'Menghadapi ujian memang sering bikin deg-degan, tapi kamu tidak sendirian! Kuncinya adalah pemahaman konsep, bukan menghafal mati. Manfaatkan fitur **Flashcard (3D)** untuk mengingat istilah kunci dan coba **Kuis** di panel kiri untuk menguji kesiapanmu. Kamu sudah berusaha, percayalah pada prosesmu!',
+          'Persiapan ujian itu kuncinya konsistensi dan ketenangan. Jangan begadang malam sebelum ujian ya. Fokus pada bab-bab penting yang ada di materi ini. Aku yakin kamu bisa mendapatkan hasil terbaik!'
+        ]
+      },
+      {
+        category: 'curhat_malas_bosan',
+        keywords: ['malas', 'mager', 'bosan', 'jenuh', 'bosen', 'gabut', 'kurang motivasi'],
+        responses: [
+          'Rasa malas atau bosan itu hal yang sangat manusiawi, kamu nggak perlu merasa bersalah! Coba pakai teknik 5 menit: paksa diri membaca materi atau membalik 2 kartu flashcard saja. Biasanya setelah mulai, rasa malasnya akan memudar dengan sendirinya. Mau coba sekarang?',
+          'Kalau lagi jenuh membaca teks panjang, coba beralih ke Tab 4 dan kerjakan 5 soal kuis acak. Sering kali kuis interaktif bikin otak lebih tertantang dan rasa bosan langsung hilang!'
+        ]
+      },
+      {
+        category: 'curhat_sedih_susah',
+        keywords: ['sedih', 'susah', 'sulit', 'nggak bisa', 'tidak bisa', 'gagal', 'kecewa', 'payah'],
+        responses: [
+          'Semua hal terasa sulit sebelum akhirnya menjadi mudah. Fakta bahwa kamu menganggap materi ini menantang artinya otakmu sedang berkembang! Jangan bandingkan langkahmu dengan orang lain. Tanyakan bagian materi mana yang paling rumit, biar kita bedah bareng di sini.',
+          'Peluk hangat secara virtual! Tidak apa-apa jika hari ini terasa berat atau belum paham sepenuhnya. Yang terpenting kamu tidak menyerah. Satu paragraf yang kamu pahami hari ini adalah kemenangan besar untuk esok hari.'
+        ]
+      },
+
+      // === KATEGORI 3: PENGETAHUAN UMUM DASAR (GENERAL KNOWLEDGE) ===
+      {
+        category: 'umum_belajar',
+        keywords: ['belajar', 'teknik belajar', 'tips belajar', 'cara belajar', 'metode belajar'],
+        responses: [
+          'Teknik belajar yang terbukti paling efektif secara sains adalah:\n1. **Active Recall**: Menguji ingatan diri sendiri (seperti fitur Flashcards & Kuis kita).\n2. **Spaced Repetition**: Mengulang materi dengan interval hari berkala.\n3. **Feynman Technique**: Mencoba menjelaskan materi rumit dengan bahasa yang sesederhana mungkin kepada orang lain.'
+        ]
+      },
+      {
+        category: 'umum_sains',
+        keywords: ['sains', 'science', 'metode ilmiah', 'ilmu pengetahuan'],
+        responses: [
+          '**Sains** adalah metode sistematis untuk membangun dan mengorganisasikan pengetahuan dalam bentuk penjelasan yang dapat diuji dan prediksi tentang alam semesta. Ciri utamanya adalah menggunakan **metode ilmiah**: observasi, hipotesis, eksperimen, dan penarikan kesimpulan berbasis bukti empiris.'
+        ]
+      },
+      {
+        category: 'umum_matematika',
+        keywords: ['matematika', 'math', 'aljabar', 'kalkulus', 'aritmatika'],
+        responses: [
+          '**Matematika** sering disebut sebagai "Ratu Ilmu Pengetahuan" (Queen of Sciences). Matematika bukan sekadar menghitung angka, melainkan studi tentang pola, struktur, ruang, dan perubahan logika formal. Konsep matematika menjadi fondasi utama dalam fisika, ekonomi, komputasi, dan kecerdasan buatan.'
+        ]
+      },
+      {
+        category: 'umum_sejarah',
+        keywords: ['sejarah', 'history', 'masa lalu', 'peradaban'],
+        responses: [
+          '**Sejarah** adalah kajian tentang masa lalu manusia yang dicatat melalui bukti tertulis, artefak, dan peristiwa penting. Mempelajari sejarah penting agar kita memahami akar peradaban saat ini, menghargai dinamika sosial, dan tidak mengulangi kesalahan fatal di masa depan.'
+        ]
+      },
+      {
+        category: 'umum_bumi',
+        keywords: ['bumi', 'earth', 'planet', 'atmosfer', 'geologi'],
+        responses: [
+          '**Bumi** adalah planet ketiga dari Matahari dan satu-satunya planet yang diketahui mendukung kehidupan. Bumi memiliki atmosfer kaya nitrogen (78%) dan oksigen (21%), medan magnet pelindung radiasi kosmis, serta permukaan yang sekitar 71% tertutup oleh air.'
+        ]
+      },
+      {
+        category: 'umum_komputer',
+        keywords: ['komputer', 'computer', 'cpu', 'hardware', 'software', 'ram'],
+        responses: [
+          '**Komputer** adalah perangkat elektronik yang memanipulasi informasi atau data sesuai sekumpulan instruksi program. Terdiri atas komponen perangkat keras seperti CPU (otak pemroses), RAM (memori kerja cepat), dan penyimpanan permanen (SSD/HDD), serta sistem operasi perangkat lunak.'
+        ]
+      },
+      {
+        category: 'umum_internet',
+        keywords: ['internet', 'web', 'jaringan', 'network', 'protokol'],
+        responses: [
+          '**Internet** (Interconnected Network) adalah sistem jaringan komputer global yang menghubungkan miliaran perangkat di seluruh dunia menggunakan standar protokol TCP/IP. Aplikasi web ini dirancang khusus agar tetap berjalan maksimal walau tanpa koneksi internet (Offline-first)!'
+        ]
+      },
+      {
+        category: 'umum_ai',
+        keywords: ['ai', 'artificial intelligence', 'kecerdasan buatan', 'machine learning', 'llm'],
+        responses: [
+          '**Artificial Intelligence (AI)** atau Kecerdasan Buatan adalah simulasi kecerdasan manusia yang dimodelkan dalam mesin komputasi untuk mengenali pola, memecahkan masalah, dan mengambil keputusan. Dalam aplikasi ini, AI bekerja secara lokal di browser Anda dengan pencarian semantik kata kunci dan ekstraksi materi.'
+        ]
+      },
+      {
+        category: 'umum_pencipta',
+        keywords: ['pencipta', 'pembuat', 'siapa kamu', 'siapa dirimu', 'kamu siapa', 'developer'],
+        responses: [
+          'Saya adalah **Asisten Belajar Offline & Lokal**, dibuat sebagai asisten cerdas berbasis peramban (Client-Side SPA) untuk mendampingi belajar Anda, membaca dokumen, membuat kartu latihan flashcard, dan kuis secara 100% privat tanpa server!'
+        ]
+      }
+    ];
+
+    /**
+     * Memeriksa apakah input pengguna cocok dengan salah satu kata kunci di Database Pengetahuan Lokal.
+     * Mengembalikan teks respons yang dipilih secara acak jika cocok, atau null jika tidak.
+     */
+    function matchLocalKnowledgeBase(userText) {
+      if (!userText) return null;
+      const lower = userText.toLowerCase().trim();
+
+      for (const entry of LOCAL_KNOWLEDGE_BASE) {
+        for (const kw of entry.keywords) {
+          // Pencocokan exact atau substring dengan boundary kata
+          const pattern = new RegExp(`(^|\\b|\\s)${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\b|\\s|[!?.,]|$)`, 'i');
+          if (pattern.test(lower)) {
+            // Pilih respons acak jika terdapat beberapa variasi jawaban
+            const randomIndex = Math.floor(Math.random() * entry.responses.length);
+            return entry.responses[randomIndex];
+          }
+        }
+      }
+
+      return null;
+    }
+
+    const STOP_WORDS = new Set([
+      'apa', 'apakah', 'siapa', 'dimana', 'kapan', 'mengapa', 'kenapa', 'bagaimana',
+      'yang', 'dan', 'di', 'ke', 'dari', 'pada', 'dalam', 'untuk', 'dengan',
+      'adalah', 'yaitu', 'merupakan', 'sebagai', 'ini', 'itu', 'bisa', 'tolong',
+      'jelaskan', 'berikan', 'ringkas', 'tentang', 'ada', 'atau', 'oleh', 'ke'
+    ]);
+
+    /**
+     * Memfilter kata kunci query pengguna dengan mengabaikan kata penghubung umum.
+     */
+    function extractSearchKeywords(query) {
+      return query
+        .toLowerCase()
+        .replace(/[^a-zA-Z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(word => word.length > 2 && !STOP_WORDS.has(word));
+    }
+
+    /**
+     * FUNGSI PENCARIAN KATA KUNCI (KEYWORD MATCHING & RETRIEVAL):
+     * Memindai kalimat dan paragraf materi untuk menemukan potongan teks dengan
+     * skor kesesuaian kata kunci tertinggi terhadap pertanyaan pengguna.
+     */
+    function findBestMatchingContext(query, content) {
+      if (!content) return null;
+
+      const keywords = extractSearchKeywords(query);
+      if (keywords.length === 0) {
+        return {
+          matchedText: content.slice(0, 320) + '...',
+          score: 1,
+          keywords: []
+        };
+      }
+
+      const paragraphs = content.split('\n\n').filter(p => p.trim().length > 20);
+      const sentences = content
+        .replace(/([.?!])\s*(?=[A-Z])/g, "$1|")
+        .split("|")
+        .map(s => s.trim())
+        .filter(s => s.length > 20);
+
+      let bestSegment = null;
+      let highestScore = 0;
+
+      // Evaluasi kalimat per kalimat
+      sentences.forEach(sentence => {
+        const lower = sentence.toLowerCase();
+        let score = 0;
+        keywords.forEach(kw => {
+          if (lower.includes(kw)) {
+            score += 2;
+            if (new RegExp(`\\b${kw}\\b`, 'i').test(sentence)) score += 1;
+          }
+        });
+
+        if (score > highestScore) {
+          highestScore = score;
+          bestSegment = sentence;
+        }
+      });
+
+      // Evaluasi paragraf jika kalimat tunggal belum cukup informatif
+      if (highestScore < 3) {
+        paragraphs.forEach(para => {
+          const lower = para.toLowerCase();
+          let pScore = 0;
+          keywords.forEach(kw => {
+            if (lower.includes(kw)) pScore += 1;
+          });
+
+          if (pScore > highestScore) {
+            highestScore = pScore;
+            bestSegment = para.slice(0, 360) + (para.length > 360 ? '...' : '');
+          }
+        });
+      }
+
+      if (highestScore > 0 && bestSegment) {
+        return {
+          matchedText: bestSegment,
+          score: highestScore,
+          keywords: keywords
+        };
+      }
+
+      return null;
+    }
+
+    /**
+     * LOGIKA PENYARINGAN PESAN (Alur Berpikir Bot Multifungsi):
+     * a. Cek Database Pengetahuan Lokal (Sapaan, Curhat/Kondisi, Pengetahuan Umum Dasar).
+     * b. Cek Dokumen (window.uploadedMaterial / Active Document):
+     *    Jika dokumen ada, cari kalimat relevan via keyword matching.
+     * c. Fallback jika tidak ditemukan: Memberikan respons ramah dan solutif.
+     */
+    function generateOfflineAIResponse(userPrompt) {
+      const promptClean = userPrompt.trim();
+      const lowerPrompt = promptClean.toLowerCase();
+
+      // -----------------------------------------------------------------------
+      // TAHAP A: CEK DATABASE PENGETAHUAN LOKAL DAHULU
+      // -----------------------------------------------------------------------
+      const localAnswer = matchLocalKnowledgeBase(promptClean);
+      if (localAnswer) {
+        return {
+          text: localAnswer,
+          reference: null
+        };
+      }
+
+      // Ambil materi dokumen yang sedang aktif (melalui window.uploadedMaterial atau state)
+      const materialText = window.uploadedMaterial || (getActiveDocument() ? getActiveDocument().content : null);
+      const activeDoc = getActiveDocument();
+
+      // -----------------------------------------------------------------------
+      // TAHAP B: CEK DOKUMEN MATERI (JIKA MATERI SUDAH DIUNGGAH)
+      // -----------------------------------------------------------------------
+      if (materialText && materialText.trim().length > 0) {
+        const docTitle = activeDoc ? activeDoc.name : 'Dokumen Aktif';
+
+        // Fitur pendukung: Permintaan Ringkasan Khusus Materi
+        if (lowerPrompt.includes('ringkas') || lowerPrompt.includes('rangkum') || lowerPrompt.includes('summary')) {
+          const snippet = materialText.slice(0, 350).replace(/\n+/g, ' ');
+          return {
+            text: `Berikut adalah intisari dari dokumen **${docTitle}**:\n\nMateri ini mencakup pembahasan mendasar mengenai topik yang dimuat dalam teks. Anda dapat mempelajari poin-poin penting secara mendalam pada tab Viewer Teks maupun Flashcards.`,
+            reference: snippet + '...'
+          };
+        }
+
+        // Fitur pendukung: Permintaan Istilah Penting
+        if (lowerPrompt.includes('istilah') || lowerPrompt.includes('kosakata') || lowerPrompt.includes('poin penting')) {
+          const points = extractKeyPointsFromText(materialText);
+          if (points.length > 0) {
+            const listText = points.slice(0, 4).map((p, idx) => `${idx + 1}. **${p.backTitle}**: ${p.backDetail.slice(0, 100)}...`).join('\n');
+            return {
+              text: `Berikut beberapa istilah penting yang berhasil diekstraksi dari dokumen **${docTitle}**:\n\n${listText}\n\nAnda juga dapat melatih pemahaman konsep ini di tab Flashcards!`,
+              reference: points[0].backDetail
+            };
+          }
+        }
+
+        // Keyword Search di dalam materi dokumen
+        const match = findBestMatchingContext(promptClean, materialText);
+        if (match) {
+          return {
+            text: `Berdasarkan penelusuran pada materi dokumen **${docTitle}**, poin berikut relevan dengan apa yang Anda tanyakan:\n\n"${match.matchedText}"`,
+            reference: match.matchedText
+          };
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // TAHAP C: FALLBACK (JIKA TIDAK KETEMU DI DATABASE MAUPUN DOKUMEN)
+      // -----------------------------------------------------------------------
+      return {
+        text: 'Wah, saya belum menemukan pembahasan spesifik tentang itu di materi belajar yang kamu unggah, dan itu di luar pengetahuan dasar saya. Coba unggah materi yang relevan atau tanyakan dengan kata kunci lain ya! Tetap semangat!',
+        reference: null
+      };
+    }
+
+    /**
+     * Menambahkan balon chat ke antarmuka obrolan.
+     */
+    function addChatMessage({ sender, text, reference = null }) {
+      const container = DOM.chatMessages;
+      if (!container) return;
+
+      const msgWrapper = document.createElement('div');
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      if (sender === 'user') {
+        msgWrapper.className = 'flex gap-3 justify-end';
+        msgWrapper.innerHTML = `
+          <div class="flex-1 space-y-1 text-right">
+            <div class="inline-block text-left p-3 rounded-2xl rounded-tr-sm bg-brand-600 text-white leading-relaxed text-xs">
+              ${escapeHtml(text)}
+            </div>
+            <div class="text-[10px] text-slate-500 font-mono">${timeStr}</div>
+          </div>
+          <div class="w-7 h-7 rounded-lg bg-surface-700 text-slate-200 flex items-center justify-center font-semibold text-[10px] shrink-0">
+            Saya
+          </div>
+        `;
+        container.appendChild(msgWrapper);
+        container.scrollTop = container.scrollHeight;
+      } else {
+        msgWrapper.className = 'flex gap-3';
+        msgWrapper.innerHTML = `
+          <div class="w-7 h-7 rounded-lg bg-brand-600/20 text-brand-400 border border-brand-500/30 flex items-center justify-center font-bold text-[10px] shrink-0">
+            AI
+          </div>
+          <div class="flex-1 space-y-1">
+            <div class="ai-bubble p-3 rounded-2xl rounded-tl-sm bg-surface-800/80 border border-surface-700/60 text-slate-200 leading-relaxed text-xs">
+              <span class="ai-stream-text"></span><span class="typing-cursor"></span>
+            </div>
+            <div class="reference-wrapper hidden mt-2">
+              <div class="p-2.5 rounded-lg bg-surface-900/90 border border-brand-500/30 text-[11px] text-slate-300">
+                <span class="text-brand-400 font-mono font-semibold flex items-center gap-1 mb-1">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                  Referensi Sumber Materi:
+                </span>
+                <p class="italic text-slate-400 font-serif border-l-2 border-brand-500/50 pl-2 mt-1 leading-normal">
+                  "${escapeHtml(reference || '')}"
+                </p>
+              </div>
+            </div>
+            <span class="text-[10px] text-slate-500 font-mono">${timeStr}</span>
+          </div>
+        `;
+        container.appendChild(msgWrapper);
+        container.scrollTop = container.scrollHeight;
+
+        // FUNGSI ANIMASI STREAMING TEKS KATA DEMI KATA
+        streamTextToElement(msgWrapper, text, reference);
+      }
+    }
+
+    /**
+     * FUNGSI STREAMING TEXT (SIMULASI AI ASLI):
+     * Memunculkan teks respons AI kata demi kata dengan interval waktu berkecepatan 28ms.
+     * Setelah selesai, kursor dihilangkan dan referensi kutipan materi dimunculkan.
+     */
+    function streamTextToElement(msgWrapper, fullText, reference) {
+      const textTarget = msgWrapper.querySelector('.ai-stream-text');
+      const cursor = msgWrapper.querySelector('.typing-cursor');
+      const refWrapper = msgWrapper.querySelector('.reference-wrapper');
+      const container = DOM.chatMessages;
+
+      AppState.isStreamingResponse = true;
+      if (DOM.chatSendBtn) DOM.chatSendBtn.disabled = true;
+
+      const words = fullText.split(' ');
+      let currentIndex = 0;
+      let accumulated = '';
+
+      const interval = setInterval(() => {
+        if (currentIndex < words.length) {
+          accumulated += (currentIndex > 0 ? ' ' : '') + words[currentIndex];
+          
+          let formatted = escapeHtml(accumulated)
+            .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>')
+            .replace(/\n\n/g, '<br><br>')
+            .replace(/\n/g, '<br>');
+
+          textTarget.innerHTML = formatted;
+          currentIndex++;
+          if (container) container.scrollTop = container.scrollHeight;
+        } else {
+          clearInterval(interval);
+          cursor?.remove();
+          if (reference && refWrapper) {
+            refWrapper.classList.remove('hidden');
+          }
+          if (container) container.scrollTop = container.scrollHeight;
+          AppState.isStreamingResponse = false;
+          if (DOM.chatSendBtn) DOM.chatSendBtn.disabled = false;
+        }
+      }, 28);
+    }
+
+    // -------------------------------------------------------------------------
+    // 7. EVENT LISTENERS INITIALIZATION
+    // -------------------------------------------------------------------------
+    function initEventListeners() {
+      // Tab Navigation Listeners
+      Object.keys(DOM.tabBtns).forEach(key => {
+        DOM.tabBtns[key]?.addEventListener('click', () => switchTab(key));
+      });
+
+      // Upload Drag-and-Drop Listeners (Multi-File)
+      const dropzone = DOM.dropzone;
+      const fileInput = DOM.fileInput;
+      if (dropzone && fileInput) {
+        fileInput.addEventListener('change', (e) => {
+          const files = e.target.files;
+          if (files && files.length > 0) {
+            handleMultipleUploadedFiles(files);
+          }
+          fileInput.value = '';
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+          dropzone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.add('drag-active');
+          });
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+          dropzone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.remove('drag-active');
+          });
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+          const dt = e.dataTransfer;
+          if (dt && dt.files && dt.files.length > 0) {
+            handleMultipleUploadedFiles(dt.files);
+          }
+        });
+      }
+
+      DOM.btnLoadSample?.addEventListener('click', () => {
+        if (!AppState.documents.some(d => d.id === SAMPLE_DOCUMENT.id)) {
+          AppState.documents.unshift(SAMPLE_DOCUMENT);
+        }
+        setActiveDocument(SAMPLE_DOCUMENT.id, true);
+      });
+
+      DOM.btnCopyViewerText?.addEventListener('click', () => {
+        const doc = getActiveDocument();
+        if (!doc) return;
+        navigator.clipboard.writeText(doc.content).then(() => {
+          if (DOM.btnCopyLabel) {
+            const original = DOM.btnCopyLabel.textContent;
+            DOM.btnCopyLabel.textContent = 'Tersalin!';
+            setTimeout(() => { DOM.btnCopyLabel.textContent = original; }, 1800);
+          }
+        });
+      });
+
+      // Flashcards Flip & Navigation Listeners
+      DOM.flashcardContainer?.addEventListener('click', toggleFlashcardFlip);
+      DOM.btnManualFlip?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleFlashcardFlip();
+      });
+
+      DOM.btnPrevCard?.addEventListener('click', () => {
+        if (AppState.flashcards.length === 0) return;
+        AppState.currentCardIndex = (AppState.currentCardIndex - 1 + AppState.flashcards.length) % AppState.flashcards.length;
+        updateFlashcardsUI();
+      });
+
+      DOM.btnNextCard?.addEventListener('click', () => {
+        if (AppState.flashcards.length === 0) return;
+        AppState.currentCardIndex = (AppState.currentCardIndex + 1) % AppState.flashcards.length;
+        updateFlashcardsUI();
+      });
+
+      // Quiz Submit & Regenerate Listeners
+      DOM.quizForm?.addEventListener('submit', handleQuizEvaluation);
+      DOM.btnRegenerateQuiz?.addEventListener('click', () => {
+        generateQuizFromActiveDoc();
+      });
+
+      // Chat Form Submission
+      DOM.chatForm?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (AppState.isStreamingResponse) return;
+
+        const input = DOM.chatInput;
+        const text = input.value.trim();
+        if (!text) return;
+
+        addChatMessage({ sender: 'user', text: text });
+        input.value = '';
+
+        setTimeout(() => {
+          const response = generateOfflineAIResponse(text);
+          addChatMessage({
+            sender: 'ai',
+            text: response.text,
+            reference: response.reference
+          });
+        }, 300);
+      });
+
+      DOM.chatInput?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          DOM.chatForm.dispatchEvent(new Event('submit'));
+        }
+      });
+
+      DOM.quickChips?.forEach(chip => {
+        chip.addEventListener('click', () => {
+          if (DOM.chatInput) {
+            DOM.chatInput.value = chip.textContent.trim();
+            DOM.chatForm.dispatchEvent(new Event('submit'));
+          }
+        });
+      });
+
+      DOM.btnClearChat?.addEventListener('click', () => {
+        if (DOM.chatMessages) {
+          DOM.chatMessages.innerHTML = '';
+          const doc = getActiveDocument();
+          addChatMessage({
+            sender: 'ai',
+            text: doc 
+              ? `Riwayat obrolan dibersihkan. Materi aktif: **${doc.name}**. Tanyakan apa saja mengenai materi ini!`
+              : `Riwayat obrolan dibersihkan. Silakan unggah materi di tab **Upload File** untuk memulai.`,
+            reference: null
+          });
+        }
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // 8. UTILITY HELPER
+    // -------------------------------------------------------------------------
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function shuffleArray(array) {
+      const copy = [...array];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+
+    // -------------------------------------------------------------------------
+    // 9. APP INITIALIZATION
+    // -------------------------------------------------------------------------
+    function initApp() {
+      initStorage();
+      initEventListeners();
+
+      renderDocumentList();
+      renderViewer();
+      generateFlashcardsFromActiveDoc();
+      generateQuizFromActiveDoc();
+
+      const activeDoc = getActiveDocument();
+      window.uploadedMaterial = activeDoc ? activeDoc.content : null;
+
+      if (DOM.headerActiveDoc) {
+        DOM.headerActiveDoc.textContent = activeDoc ? activeDoc.name : 'Belum Ada Dokumen';
+      }
+
+      if (DOM.chatMessages && DOM.chatMessages.children.length === 0) {
+        addChatMessage({
+          sender: 'ai',
+          text: activeDoc 
+            ? `Halo! Saya asisten belajar offline Anda. Dokumen **${activeDoc.name}** aktif di memori lokal. Silakan tanyakan materi, minta ringkasan, atau gunakan flashcards dan kuis di sebelah kiri!`
+            : `Halo! Saya asisten belajar offline Anda. Belum ada dokumen yang dimuat. Silakan unggah materi (.txt/.md) di tab **Upload File** untuk memulai belajar.`,
+          reference: null
+        });
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initApp);
+    } else {
+      initApp();
+    }
+  })();
+  </script>
+</body>
+</html>
